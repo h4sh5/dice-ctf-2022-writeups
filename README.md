@@ -9,6 +9,8 @@ Challenges done:
 
 https://flagle.mc.ax/
 
+(saved here on archive https://web.archive.org/web/20220207114956/https://flagle.mc.ax/)
+
 Opening up the browser network console when loading the site shows that there're a few files loaded:
 
 <image src=rev_flagle/network.png>
@@ -197,5 +199,118 @@ b'T$r3}\n'
 Ok, last piece!
 
 ### Piece 4 - pain
+
+Ok, so `i != 4` is not found in the wasm guess function. It's found in [flag-checker.js](rev_flagle/flag-checker.js) on line 1729:
+```js
+function validate_4(a){ return c(UTF8ToString(a)) == 0 ? 0 : 1; }
+```
+
+Which calls `c`, this really obfuscated function in [script.js](rev_flagle/script.js):
+
+```js
+function c(b){var e={'HLPDd':function(g,h){return g===h;},'tIDVT':function(g,h){return g(h);},'QIMdf':function(g,h){return g-h;},'FIzyt':'int','oRXGA':function(g,h){return g<<h;},'AMINk':function(g,h){return g&h;}},f=current_guess;try{let g=e['HLPDd'](btoa(e['tIDVT'](intArrayToString,window[b](b[e['QIMdf'](f,0x26f4+0x1014+-0x3707*0x1)],e['FIzyt'])()['toString'](e['oRXGA'](e['AMINk'](f,-0x1a3*-0x15+0x82e*-0x1+-0x1a2d),0x124d+-0x1aca+0x87f))['match'](/.{2}/g)['map'](h=>parseInt(h,f*f)))),'ZGljZQ==')?-0x1*0x1d45+0x2110+-0x3ca:-0x9*0x295+-0x15*-0x3+0x36*0x6d;}catch{return 0x1b3c+-0xc9*0x2f+-0x19*-0x63;}}
+```
+
+suuuper gross. 
+
+After an intense period of prettifying and deobfucation and renaming, it looks like this:
+```js
+
+// specifically made for logging
+function testParseint(x,y) {
+    console.log('parseInt:',x,y);
+    return parseInt(x,y);
+}
+
+
+function c(b)
+{
+    var e = {
+            'equals': function(g, h)
+            {
+                console.log('equals:', g, h);
+                return g === h;
+            },
+            'funcCall': function(g, h)
+            {
+                console.log('funccall:', g, h);
+                return g(h);
+            },
+            'minus': function(g, h)
+            {
+                console.log('minus:', g, h);
+                return g - h;
+            },
+            'FIzyt': 'int',
+            '<<shift': function(g, h)
+            {
+                console.log('shift:', g, h);
+                return g << h;
+            },
+            '&and': function(g, h)
+            {
+                console.log('&and:', g, h);
+                return g & h;
+            }
+        },
+        f = current_guess;
+    try
+    {
+        console.log(window);
+        let g = e['equals'](
+                btoa(
+                    e['funcCall'](intArrayToString, window[b](b[e['minus'](f, 1)], 'int')()['toString'](e['<<shift'](e['&and'](f, 4), 2)) ['match'](/.{2}/g)['map'](h => testParseint(h, f * f))
+                )), //<- g
+
+             'ZGljZQ==') ? 1 : 0; // <- h
+        return g;
+        //ZGljZQ== is 'dice'
+
+    }
+    catch (e)
+    {   console.log('error:',e)
+        return 0; // 0
+    }
+}
+
+
+```
+
+So looks like it's doing an operation to each pair of chars in the input (pairs because of the regex `/.{2}/g`, which you can test on https://regex101.com)
+
+The operation is similar to a hex decode when `f*f = 16` (when f is 4), because the `parseInt` function in js converts a string to an integer of a base given by the argument.
+
+I made the rewrite function above, and I could see what was happening by pasting it into the console and then entering input, because the `testParseint` function I wrote gives me some logging.
+
+The trick to solving this is the `window[b]`, where `b` is maybe our input. The special thing about `window` is that it's the global window context object, which only has that many keys. We know that this function `c()` returns 0 when it fails, so we can brute force all the 5-length keys in `window`, but **only when f=4, meaning current_guess=4** (`f = current_guess`  in the code), because:
+1. we are missing the 4th part of the flag (assumption) and
+2. it doesn't make sense to decode in any other base (1,4,9,25 or 36??)
+
+so this loop in the console would solve it:
+```js
+current_guess=4; 
+for (k in window) {
+	if (k.length==5) {
+		if (c(k) !== 0) {
+			console.log('win:', k);
+		}
+	}
+}
+```
+
+win: `cwrap`
+
+would only work when current_guess=4, so on the GUI it looks like this to get it:
+
+<img src=rev_flagle/cwrap.png>
+
+(only works on 4th grid)
+
+There we go!
+
+
+<img src=rev_flagle/flag.png>
+
+
 
 
